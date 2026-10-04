@@ -94,6 +94,11 @@ export function groqEndpoint(rawBase: string): string {
   return `${base}/chat/completions`;
 }
 
+/** Opt-in (AI_DEBUG=1) diagnostics. Never logs the API key — only its length. */
+const debug = (...args: unknown[]) => {
+  if (envValue("AI_DEBUG") === "1") console.log("[api-eval][diag]", ...args);
+};
+
 async function callGroq(prompt: string, signal: AbortSignal): Promise<string> {
   const key = envValue("GROQ_API_KEY");
   if (!key) throw new Error("GROQ_API_KEY is not configured");
@@ -101,13 +106,28 @@ async function callGroq(prompt: string, signal: AbortSignal): Promise<string> {
   // gpt-oss models are reasoning models: reasoning tokens count toward the output limit,
   // so keep reasoning light and leave headroom for the JSON answer.
   const isGptOss = model.includes("gpt-oss");
-  const res = await fetch(groqEndpoint(envValue("GROQ_BASE_URL")), {
+  const url = groqEndpoint(envValue("GROQ_BASE_URL"));
+  const maxTokens = isGptOss ? 4000 : 1800;
+  debug({
+    url,
+    model,
+    rawModel: JSON.stringify(process.env.GROQ_MODEL ?? null),
+    rawBaseUrl: JSON.stringify(process.env.GROQ_BASE_URL ?? null),
+    keyLengthRaw: (process.env.GROQ_API_KEY ?? "").length,
+    keyLengthUsed: key.length,
+    max_completion_tokens: maxTokens,
+    reasoning_effort: isGptOss ? "low" : null,
+    promptChars: prompt.length,
+    nodeEnv: process.env.NODE_ENV,
+    vercel: !!process.env.VERCEL,
+  });
+  const res = await fetch(url, {
     method: "POST",
     signal,
     headers: { "content-type": "application/json", authorization: `Bearer ${key}` },
     body: JSON.stringify({
       model,
-      max_completion_tokens: isGptOss ? 4000 : 1800,
+      max_completion_tokens: maxTokens,
       temperature: 0.2,
       ...(isGptOss ? { reasoning_effort: "low" } : {}),
       response_format: { type: "json_object" },
@@ -118,15 +138,23 @@ async function callGroq(prompt: string, signal: AbortSignal): Promise<string> {
     }),
   });
   if (!res.ok) {
-    // Groq returns {"error":{"message":...}}; include it in server logs (never the key) to ease diagnosis.
+    // Groq returns {"error":{"message":...,"failed_generation":...}}; log the message (never the key).
     let detail = "";
     try {
-      const body = (await res.json()) as { error?: { message?: string } };
+      const body = (await res.json()) as { error?: { message?: string; failed_generation?: string } };
       detail = body.error?.message ? `: ${body.error.message.slice(0, 200)}` : "";
+      const fg = body.error?.failed_generation;
+      if (typeof fg === "string") {
+        debug({ failedGenerationChars: fg.length, failedGenerationHead: fg.slice(0, 300), failedGenerationTail: fg.slice(-200) });
+      }
     } catch {}
     throw new Error(`Groq API returned HTTP ${res.status}${detail}`);
   }
-  const data = (await res.json()) as { choices?: { message?: { content?: string } }[] };
+  const data = (await res.json()) as {
+    choices?: { message?: { content?: string }; finish_reason?: string }[];
+    usage?: { completion_tokens?: number };
+  };
+  debug({ finish_reason: data.choices?.[0]?.finish_reason, completion_tokens: data.usage?.completion_tokens });
   return data.choices?.[0]?.message?.content ?? "";
 }
 
@@ -157,6 +185,7 @@ export async function explainWithAi(
   const timeout = setTimeout(() => controller.abort(), Number(process.env.AI_TIMEOUT_MS) || 25_000);
   try {
     const prompt = buildPrompt(issues, score);
+    debug({ issues: issues.length });
     const text = await callGroq(prompt, controller.signal);
     return { ai: normalizeAi(extractJson(text), issues), error: null };
   } catch (e) {
