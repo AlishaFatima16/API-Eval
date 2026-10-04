@@ -1,0 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root { color-scheme: dark; }
+body { background: #0a0e17; color: #e2e8f0; }
+textarea { tab-size: 2; }
