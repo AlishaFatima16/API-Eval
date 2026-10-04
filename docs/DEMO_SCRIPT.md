@@ -16,7 +16,7 @@
 "First, the Reliability Score: 74 out of 100, Needs Attention. This number is fully deterministic — high is minus 15, medium minus 8, low minus 3. The AI doesn't get to decide it, so it's reproducible."
 
 **6. Detected issues (≈25 s)**
-"Here are the issues, found by our validation engine, not an LLM. High severity: `user.email` is null but should be a string. Medium: `user.age` arrived as the string '18' instead of a number. Low: `user.role` is an undocumented field — a classic mass-assignment risk."
+"Here are the issues, found by our validation engine, not an LLM. High severity: `user.email` is null but should be a string. Medium: `user.age` arrived as the string '17' instead of a number. Low: `user.role` is an undocumented field — a classic mass-assignment risk."
 
 **7. AI explanation (≈20 s)**
 "Now the AI layer. It receives only the validated issues and explains them: the summary, and why each one matters in production. It can't invent problems — anything it mentions that the validator didn't find is thrown away. And if the AI is down, everything above still works."

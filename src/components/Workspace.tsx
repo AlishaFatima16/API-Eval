@@ -106,7 +106,7 @@ export default function Workspace() {
               spellCheck={false}
               value={response}
               onChange={(e) => setResponse(e.target.value)}
-              placeholder={'{\n  "name": "Alisha",\n  "email": null,\n  "age": "18",\n  "status": "active"\n}'}
+              placeholder={'{\n  "name": "Alisha",\n  "email": null,\n  "age": "17",\n  "status": "active"\n}'}
             />
           </div>
         </div>

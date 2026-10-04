@@ -11,7 +11,7 @@ Detect contract violations, reliability issues, and hidden API risks before they
 
 ## Slide 2 — The Problem
 - APIs drift from their documented contracts
-- `null` where a value is promised, `"18"` instead of `18`, undocumented fields leaking
+- `null` where a value is promised, `"17"` instead of `17`, undocumented fields leaking
 - Status is `200 OK` — the bug ships anyway
 - Result: client crashes, bad data, security exposure
 

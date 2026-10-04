@@ -41,7 +41,7 @@ describe("AI layer", () => {
       summary: "Three problems.",
       keyIssues: [{ path: "user.age", explanation: "string", impact: "breaks math" }, { path: "made.up", explanation: "x", impact: "y" }],
       recommendations: ["Fix it"],
-      testCases: [{ name: "Reject age string", purpose: "p", input: { user: { age: "18" } }, expected: "400" }],
+      testCases: [{ name: "Reject age string", purpose: "p", input: { user: { age: "17" } }, expected: "400" }],
     }) + "\n```";
     vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content: reply } }] })));
     const c = core();
@@ -92,9 +92,9 @@ describe("Groq request format", () => {
     expect(r.ai).toBeNull();
     expect(r.error).toMatch(/unavailable/);
   });
-  it("defaults to a gpt-oss model with light reasoning and headroom for output", async () => {
+  it("gpt-oss models get light reasoning and headroom for output", async () => {
     vi.stubEnv("GROQ_API_KEY", "test-key");
-    vi.stubEnv("GROQ_MODEL", "");
+    vi.stubEnv("GROQ_MODEL", "openai/gpt-oss-120b");
     const fetchMock = vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content: "{}" } }] }));
     vi.stubGlobal("fetch", fetchMock);
     const c = core();
@@ -112,5 +112,76 @@ describe("Groq request format", () => {
     const c = core();
     await explainWithAi(c.issues, c.score);
     expect(JSON.parse(fetchMock.mock.calls[0][1].body).reasoning_effort).toBeUndefined();
+  });
+});
+describe("Groq JSON generation robustness", () => {
+  const good = { summary: "S", keyIssues: [{ path: "user.age", explanation: "e", impact: "i" }], recommendations: ["r"], testCases: [] };
+  const bodyOf = (m: ReturnType<typeof vi.fn>, n: number) => JSON.parse(m.mock.calls[n][1].body);
+  const failed = (failed_generation: string) =>
+    Response.json({ error: { message: "Failed to generate JSON. Please adjust your prompt. See 'failed_generation' for more details.", failed_generation } }, { status: 400 });
+
+  it("defaults to llama-3.3-70b-versatile in JSON mode without reasoning params", async () => {
+    vi.stubEnv("GROQ_API_KEY", "test-key");
+    vi.stubEnv("GROQ_MODEL", "");
+    const m = vi.fn().mockResolvedValue(Response.json({ choices: [{ message: { content: JSON.stringify(good) } }] }));
+    vi.stubGlobal("fetch", m);
+    const c = core();
+    const r = await explainWithAi(c.issues, c.score);
+    expect(r.ai?.summary).toBe("S");
+    expect(bodyOf(m, 0).model).toBe("llama-3.3-70b-versatile");
+    expect(bodyOf(m, 0).response_format).toEqual({ type: "json_object" });
+    expect(bodyOf(m, 0).reasoning_effort).toBeUndefined();
+  });
+  it("HTTP 400 with salvageable failed_generation -> parsed without a second call", async () => {
+    vi.stubEnv("GROQ_API_KEY", "test-key");
+    const m = vi.fn().mockResolvedValue(failed("```json\n" + JSON.stringify(good) + "\n```"));
+    vi.stubGlobal("fetch", m);
+    const c = core();
+    const r = await explainWithAi(c.issues, c.score);
+    expect(r.error).toBeNull();
+    expect(r.ai?.keyIssues[0].path).toBe("user.age");
+    expect(m).toHaveBeenCalledTimes(1);
+  });
+  it("HTTP 400 with unusable failed_generation -> retries once without JSON mode", async () => {
+    vi.stubEnv("GROQ_API_KEY", "test-key");
+    const m = vi
+      .fn()
+      .mockResolvedValueOnce(failed("garbage"))
+      .mockResolvedValueOnce(Response.json({ choices: [{ message: { content: JSON.stringify(good) } }] }));
+    vi.stubGlobal("fetch", m);
+    const c = core();
+    const r = await explainWithAi(c.issues, c.score);
+    expect(r.error).toBeNull();
+    expect(m).toHaveBeenCalledTimes(2);
+    expect(bodyOf(m, 1).response_format).toBeUndefined();
+  });
+  it("both attempts fail -> deterministic fallback, score untouched", async () => {
+    vi.stubEnv("GROQ_API_KEY", "test-key");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(failed("garbage")));
+    const c = core();
+    const r = await explainWithAi(c.issues, c.score);
+    expect(r.ai).toBeNull();
+    expect(r.error).toMatch(/unavailable/);
+    expect(c.score.score).toBe(74);
+  });
+  it("extractJson repairs raw newlines/tabs inside string values", () => {
+    expect(extractJson('{"summary":"line one\nline two\tend","recommendations":["a\nb"]}')).toEqual({
+      summary: "line one\nline two\tend",
+      recommendations: ["a\nb"],
+    });
+  });
+  it("extractJson tolerates fences, prose, trailing commas and truncation", () => {
+    expect(extractJson('Here you go:\n```json\n{"a":1,"b":[1,2,],}\n```')).toEqual({ a: 1, b: [1, 2] });
+    expect(extractJson('{"summary":"S","recommendations":["x","y')).toEqual({ summary: "S", recommendations: ["x"] });
+    expect(extractJson('{"summary":"S","keyIssues":[{"path":"a","explanation":"e"},{"path":"b","expl')).toEqual({
+      summary: "S",
+      keyIssues: [{ path: "a", explanation: "e" }, { path: "b" }],
+    });
+    expect(() => extractJson("no json here")).toThrow();
+  });
+  it("normalizeAi drops key issues that lost their explanation to truncation", () => {
+    const issues = core().issues;
+    const r = normalizeAi({ summary: "S", keyIssues: [{ path: "user.age", explanation: "e", impact: "i" }, { path: "user.email" }] }, issues);
+    expect(r.keyIssues.map((k) => k.path)).toEqual(["user.age"]);
   });
 });

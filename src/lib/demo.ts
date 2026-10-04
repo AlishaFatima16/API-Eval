@@ -10,7 +10,7 @@ export const DEMO_RESPONSE = `{
   "user": {
     "name": "Alisha",
     "email": null,
-    "age": "18",
+    "age": "17",
     "role": "admin"
   }
 }`;

@@ -22,7 +22,7 @@ describe("validator", () => {
     expect(types({ a: "string" }, { a: "x", extra: 1 })).toEqual(["extra:unexpected_field:low"]);
   });
   it("type mismatch", () => {
-    expect(types({ age: "number" }, { age: "18" })).toEqual(["age:type_mismatch:medium"]);
+    expect(types({ age: "number" }, { age: "17" })).toEqual(["age:type_mismatch:medium"]);
     expect(types({ n: "integer" }, { n: 1.5 })).toEqual(["n:type_mismatch:medium"]);
   });
   it("null value, and nullable union allows null", () => {

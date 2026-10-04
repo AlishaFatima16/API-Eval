@@ -70,7 +70,7 @@ export function generateTestCases(schema: Schema, issues: Issue[]): TestCase[] {
         add({
           name: `Reject ${p} when supplied as ${i.actual}`,
           purpose: `Ensure the API enforces the contract type (${i.expected}) for "${p}".`,
-          input: wrapAtPath(p, i.actual.startsWith("string") ? "18" : i.actual === "array" ? [] : i.actual === "object" ? {} : "invalid"),
+          input: wrapAtPath(p, i.actual.startsWith("string") ? "17" : i.actual === "array" ? [] : i.actual === "object" ? {} : "invalid"),
           expected: "Validation error / HTTP 400 identifying the field and expected type",
           kind: "negative",
           source: "deterministic",

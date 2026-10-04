@@ -140,7 +140,7 @@ Click **Load Demo**, then **Analyze API**:
 // Contract
 { "user": { "name": "string", "email": "string", "age": "number" } }
 // Response
-{ "user": { "name": "Alisha", "email": null, "age": "18", "role": "admin" } }
+{ "user": { "name": "Alisha", "email": null, "age": "17", "role": "admin" } }
 ```
 
 Result: **74 / 100 — Needs Attention** with `user.email` (high, null), `user.age` (medium, string instead of number), `user.role` (low, unexpected), plus test cases such as *Reject user.age when supplied as string → HTTP 400*.
